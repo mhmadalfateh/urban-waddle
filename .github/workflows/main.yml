@@ -1,0 +1,64 @@
+name: Build Fateh Messenger APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Inspect project
+        run: |
+          echo "Files in repository:"
+          ls -la
+          echo "Searching for Gradle settings:"
+          find . -maxdepth 5 -type f \( \
+            -name "settings.gradle" -o \
+            -name "settings.gradle.kts" \
+          \)
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -e
+
+          SETTINGS=$(find . -maxdepth 5 -type f \( \
+            -name "settings.gradle" -o \
+            -name "settings.gradle.kts" \
+          \) -print -quit)
+
+          if [ -z "$SETTINGS" ]; then
+            echo "ERROR: Gradle project files are missing."
+            echo "The ZIP must be extracted and its contents uploaded."
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$SETTINGS")
+          echo "Project directory: $PROJECT_DIR"
+
+          cd "$PROJECT_DIR"
+          gradle assembleDebug
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FatehMessenger-APK
+          path: '**/build/outputs/apk/debug/*.apk'
+          if-no-files-found: error

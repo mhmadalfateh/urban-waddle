@@ -23,40 +23,43 @@ jobs:
       - name: Install Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Inspect project
-        run: |
-          echo "Files in repository:"
-          ls -la
-          echo "Searching for Gradle settings:"
-          find . -maxdepth 5 -type f \( \
-            -name "settings.gradle" -o \
-            -name "settings.gradle.kts" \
-          \)
-
-      - name: Build APK
+      - name: Extract ZIP and find project
         shell: bash
         run: |
           set -e
 
-          SETTINGS=$(find . -maxdepth 5 -type f \( \
-            -name "settings.gradle" -o \
-            -name "settings.gradle.kts" \
-          \) -print -quit)
+          mkdir -p extracted
+
+          find . -maxdepth 3 -type f -name '*.zip' \
+            ! -path './extracted/*' -print0 |
+          while IFS= read -r -d '' zipfile; do
+            echo "Extracting: $zipfile"
+            unzip -o "$zipfile" -d extracted
+          done
+
+          echo "Searching for Gradle project..."
+
+          SETTINGS=$(find . -maxdepth 8 -type f \( \
+            -name settings.gradle \
+            -o -name settings.gradle.kts \
+          \) ! -path './.git/*' -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: Gradle project files are missing."
-            echo "The ZIP must be extracted and its contents uploaded."
+            echo "ERROR: No Gradle settings file found."
+            echo "Available files:"
+            find . -maxdepth 4 -type f | head -200
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$SETTINGS")
-          echo "Project directory: $PROJECT_DIR"
+          echo "Found project: $SETTINGS"
+          echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
 
+      - name: Build APK
+        run: |
           cd "$PROJECT_DIR"
           gradle assembleDebug
 
       - name: Upload APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: FatehMessenger-APK
